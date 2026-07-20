@@ -21,14 +21,18 @@ import {
   startSolveSession,
   type SolveSessionState,
 } from './solveSession';
-import { compareResultWithBest, type ResultComparison } from './results';
+import {
+  compareResultWithBest,
+  type ResultComparison,
+  type SolveResult,
+} from './results';
 
 export type GameSessionState = {
   cubeState: CubeState;
   timer: TimerState;
   visibleElapsedMs: number;
   solveSession: SolveSessionState;
-  bestResult: SolveSessionState['result'];
+  bestResult: SolveResult | null;
   lastResultComparison: ResultComparison | null;
 };
 
@@ -36,7 +40,8 @@ export type GameSessionAction =
   | { type: 'scramble'; nowMs: number; cubeState?: CubeState }
   | { type: 'reset' }
   | { type: 'tick'; nowMs: number }
-  | { type: 'commitMove'; move: Move; nowMs: number };
+  | { type: 'hydrateBest'; bestResult: SolveResult | null }
+  | { type: 'commitMove'; move: Move; nowMs: number; completedAt?: string };
 
 export function createInitialGameSession(): GameSessionState {
   return {
@@ -82,6 +87,13 @@ export function gameSessionReducer(
     };
   }
 
+  if (action.type === 'hydrateBest') {
+    return {
+      ...state,
+      bestResult: action.bestResult,
+    };
+  }
+
   const nextCubeState = applyMove(state.cubeState, action.move);
   const solvedAfterMove = isSolved(nextCubeState);
   const timer =
@@ -96,8 +108,13 @@ export function gameSessionReducer(
     isSolved: solvedAfterMove,
     elapsedMs: completionElapsedMs,
   });
-  const completedResult =
-    state.solveSession.result === null ? solveSession.result : null;
+  const completedResult: SolveResult | null =
+    state.solveSession.result === null && solveSession.result
+      ? {
+          ...solveSession.result,
+          ...(action.completedAt ? { completedAt: action.completedAt } : {}),
+        }
+      : null;
   const resultComparison = completedResult
     ? compareResultWithBest(completedResult, state.bestResult)
     : state.lastResultComparison;
