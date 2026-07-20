@@ -6,6 +6,7 @@ import {
   FACE_SPECS,
   type Move,
   cloneCubeState,
+  createSolvedCube,
 } from './model';
 
 export const FACE_MOVES: readonly Move[] = ALL_FACES.flatMap((face) => [
@@ -122,6 +123,15 @@ export function createScrambleMoves(
   }
 
   return moves;
+}
+
+export function createScrambledCube(
+  length = 25,
+  random: () => number = Math.random,
+): CubeState {
+  return resetMoveHistory(
+    applyMoves(createSolvedCube(), createScrambleMoves(length, random)),
+  );
 }
 
 export function rotateVector(

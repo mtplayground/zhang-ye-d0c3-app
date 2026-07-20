@@ -14,6 +14,7 @@ import {
 import {
   applyMove,
   applyMoves,
+  createScrambledCube,
   createScrambleMoves,
   invertMoves,
   moveToNotation,
@@ -146,6 +147,19 @@ describe('turn engine', () => {
         FACE_SPECS[moves[moveIndex - 1].face].axis,
       );
     }
+  });
+
+  it('creates a scrambled cube with reset move history', () => {
+    const values = [
+      0.01, 0.9, 0.2, 0.7, 0.4, 0.1, 0.8, 0.2, 0.5, 0.95, 0.0, 0.2, 0.3, 0.4,
+    ];
+    let index = 0;
+    const cube = createScrambledCube(6, () => values[index++ % values.length]);
+
+    expect(cube.cubies).toHaveLength(26);
+    expect(getStickerCount(cube)).toBe(54);
+    expect(cube.moveHistory).toHaveLength(0);
+    expect(isSolved(cube)).toBe(false);
   });
 });
 
