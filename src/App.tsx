@@ -29,6 +29,7 @@ import {
 type ActionButtonProps = {
   icon: React.ReactNode;
   label: string;
+  disabled?: boolean;
   onClick?: () => void;
   variant?: 'primary' | 'secondary';
 };
@@ -46,6 +47,7 @@ declare global {
 function ActionButton({
   icon,
   label,
+  disabled = false,
   onClick,
   variant = 'secondary',
 }: ActionButtonProps) {
@@ -57,8 +59,9 @@ function ActionButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-11 min-w-28 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium shadow-sm transition ${variantClass}`}
+      className={`inline-flex h-11 min-w-28 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium shadow-sm transition disabled:cursor-not-allowed disabled:opacity-45 ${variantClass}`}
     >
       {icon}
       <span>{label}</span>
@@ -84,6 +87,7 @@ function App() {
   const [isResultDismissed, setIsResultDismissed] = useState(false);
   const [themeId, setThemeId] = useState<CubeThemeId>(DEFAULT_CUBE_THEME_ID);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isCubeInteractionBusy, setIsCubeInteractionBusy] = useState(false);
   const savedResultKeyRef = useRef<string | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const cubeTheme = getCubeTheme(themeId);
@@ -292,6 +296,7 @@ function App() {
                 state={cubeState}
                 theme={cubeTheme}
                 onMoveCommit={handleMoveCommit}
+                onInteractionBusyChange={setIsCubeInteractionBusy}
               />
             </div>
           </div>
@@ -329,12 +334,14 @@ function App() {
               icon={<Shuffle className="size-4" aria-hidden="true" />}
               label="打乱"
               onClick={handleScramble}
+              disabled={isCubeInteractionBusy}
               variant="primary"
             />
             <ActionButton
               icon={<RotateCcw className="size-4" aria-hidden="true" />}
               label="重置"
               onClick={handleReset}
+              disabled={isCubeInteractionBusy}
             />
           </div>
         </footer>

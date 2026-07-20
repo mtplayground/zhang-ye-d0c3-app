@@ -36,6 +36,11 @@ try {
 
   await page.goto(`${BASE_URL}/?e2e=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__cubeE2E));
+  await assertCanvasReady(page, {
+    label: 'desktop',
+    minWidth: 720,
+    minHeight: 340,
+  });
 
   const timer = page.getByLabel('计时器');
   await expectAttribute(timer, 'data-timer-status', 'idle');
@@ -128,6 +133,25 @@ try {
     (await page.getByRole('dialog').count()) === 0,
     'play again should dismiss the result dialog and start a new scramble',
   );
+
+  const mobileContext = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 700 },
+  });
+  const mobilePage = await mobileContext.newPage();
+
+  try {
+    await mobilePage.goto(`${BASE_URL}/?e2e=1`, { waitUntil: 'networkidle' });
+    await mobilePage.waitForFunction(() => Boolean(window.__cubeE2E));
+    await assertCanvasReady(mobilePage, {
+      label: 'mobile',
+      minWidth: 340,
+      minHeight: 280,
+    });
+  } finally {
+    await mobileContext.close();
+  }
 
   console.log('E2E flow passed');
 } finally {
@@ -233,6 +257,83 @@ async function expectText(locator, pattern) {
       source: pattern.source,
       flags: pattern.flags,
     },
+  );
+}
+
+async function assertCanvasReady(page, { label, minWidth, minHeight }) {
+  await page.waitForSelector('[data-testid="cube-webgl-canvas"]');
+  await page.waitForTimeout(120);
+
+  const result = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-testid="cube-webgl-canvas"]');
+
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return { ok: false, reason: 'canvas missing' };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const gl =
+      canvas.getContext('webgl2') ??
+      canvas.getContext('webgl') ??
+      canvas.getContext('experimental-webgl');
+
+    if (!gl) {
+      return { ok: false, reason: 'WebGL context unavailable' };
+    }
+
+    const samplePoints = [
+      [0.5, 0.5],
+      [0.42, 0.42],
+      [0.58, 0.44],
+      [0.45, 0.58],
+      [0.6, 0.58],
+    ];
+    const pixel = new Uint8Array(4);
+    let nonTransparentSamples = 0;
+
+    for (const [xRatio, yRatio] of samplePoints) {
+      const x = Math.max(
+        0,
+        Math.min(
+          gl.drawingBufferWidth - 1,
+          Math.round(gl.drawingBufferWidth * xRatio),
+        ),
+      );
+      const y = Math.max(
+        0,
+        Math.min(
+          gl.drawingBufferHeight - 1,
+          Math.round(gl.drawingBufferHeight * yRatio),
+        ),
+      );
+
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+
+      if (pixel[3] > 0 && pixel[0] + pixel[1] + pixel[2] > 0) {
+        nonTransparentSamples += 1;
+      }
+    }
+
+    return {
+      ok: nonTransparentSamples > 0,
+      reason: 'no nontransparent canvas samples',
+      height: rect.height,
+      nonTransparentSamples,
+      width: rect.width,
+    };
+  });
+
+  assert(
+    result.width >= minWidth,
+    `${label} canvas should be at least ${minWidth}px wide, got ${result.width}px`,
+  );
+  assert(
+    result.height >= minHeight,
+    `${label} canvas should be at least ${minHeight}px tall, got ${result.height}px`,
+  );
+  assert(
+    result.ok,
+    `${label} canvas should render nonblank WebGL pixels: ${result.reason}`,
   );
 }
 

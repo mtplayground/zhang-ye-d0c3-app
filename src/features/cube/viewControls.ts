@@ -84,6 +84,13 @@ export function endOrbitDrag(state: OrbitState): void {
   state.lastPoint = null;
 }
 
+export function cancelOrbitMotion(state: OrbitState): void {
+  state.dragging = false;
+  state.lastPoint = null;
+  state.velocityYaw = 0;
+  state.velocityPitch = 0;
+}
+
 export function stepOrbitInertia(
   state: OrbitState,
   deltaMs: number,
