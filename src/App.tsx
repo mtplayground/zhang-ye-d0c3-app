@@ -1,16 +1,12 @@
+import { useMemo } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
+import { CubeScene, createSolvedCube } from './features/cube';
 
 type ActionButtonProps = {
   icon: React.ReactNode;
   label: string;
   variant?: 'primary' | 'secondary';
 };
-
-const cubeFaces = [
-  { className: 'cube-face cube-face-front', label: 'F' },
-  { className: 'cube-face cube-face-top', label: 'U' },
-  { className: 'cube-face cube-face-right', label: 'R' },
-];
 
 function ActionButton({
   icon,
@@ -33,23 +29,9 @@ function ActionButton({
   );
 }
 
-function CubePlaceholder() {
-  return (
-    <div className="cube-stage" aria-label="3D 魔方渲染区占位" role="img">
-      <div className="cube-shell">
-        {cubeFaces.map((face) => (
-          <div className={face.className} key={face.label}>
-            {Array.from({ length: 9 }).map((_, index) => (
-              <span className="sticker" key={`${face.label}-${index}`} />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function App() {
+  const cubeState = useMemo(() => createSolvedCube(), []);
+
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-7 lg:px-10">
@@ -81,9 +63,9 @@ function App() {
           <div className="w-full max-w-4xl">
             <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-white shadow-stage">
               <div className="absolute left-5 top-5 z-10 rounded-md border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-600 shadow-sm backdrop-blur">
-                中央 3D 渲染区
+                经典六色 3D 魔方
               </div>
-              <CubePlaceholder />
+              <CubeScene state={cubeState} />
             </div>
           </div>
         </section>
