@@ -4,8 +4,12 @@ import {
   CUBE_THEMES,
   CubeScene,
   DEFAULT_CUBE_THEME_ID,
+  applyMoves,
+  createSolvedCube,
   getCubeTheme,
   loadCubeThemePreference,
+  parseMoveSequence,
+  resetMoveHistory,
   saveCubeThemePreference,
   type CubeTheme,
   type CubeThemeId,
@@ -28,6 +32,16 @@ type ActionButtonProps = {
   onClick?: () => void;
   variant?: 'primary' | 'secondary';
 };
+
+declare global {
+  interface Window {
+    __cubeE2E?: {
+      commitMove: (move: Move) => void;
+      reset: () => void;
+      scrambleWithSequence: (sequence: string) => void;
+    };
+  }
+}
 
 function ActionButton({
   icon,
@@ -73,6 +87,8 @@ function App() {
   const savedResultKeyRef = useRef<string | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const cubeTheme = getCubeTheme(themeId);
+  const isE2EBridgeEnabled =
+    new URLSearchParams(window.location.search).get('e2e') === '1';
 
   useEffect(() => {
     const history = loadSolveHistory();
@@ -188,6 +204,33 @@ function App() {
     saveCubeThemePreference(nextThemeId);
     setIsThemeMenuOpen(false);
   }, []);
+
+  useEffect(() => {
+    if (!isE2EBridgeEnabled) {
+      return;
+    }
+
+    window.__cubeE2E = {
+      commitMove: handleMoveCommit,
+      reset: handleReset,
+      scrambleWithSequence: (sequence: string) => {
+        const deterministicState = resetMoveHistory(
+          applyMoves(createSolvedCube(), parseMoveSequence(sequence)),
+        );
+
+        setIsResultDismissed(false);
+        dispatchGameSession({
+          type: 'scramble',
+          nowMs: performance.now(),
+          cubeState: deterministicState,
+        });
+      },
+    };
+
+    return () => {
+      delete window.__cubeE2E;
+    };
+  }, [handleMoveCommit, handleReset, isE2EBridgeEnabled]);
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
