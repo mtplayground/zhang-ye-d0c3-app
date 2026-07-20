@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
 import { CubeScene, type Move } from './features/cube';
 import {
+  ResultDialog,
   createInitialGameSession,
   formatElapsedTime,
   gameSessionReducer,
@@ -43,8 +44,16 @@ function App() {
     undefined,
     createInitialGameSession,
   );
-  const { cubeState, solveSession, timer, visibleElapsedMs } = gameSession;
+  const {
+    bestResult,
+    cubeState,
+    lastResultComparison,
+    solveSession,
+    timer,
+    visibleElapsedMs,
+  } = gameSession;
   const completionResult = solveSession.result;
+  const [isResultDismissed, setIsResultDismissed] = useState(false);
 
   useEffect(() => {
     if (timer.status !== 'running') {
@@ -65,6 +74,10 @@ function App() {
     };
   }, [timer]);
 
+  useEffect(() => {
+    setIsResultDismissed(false);
+  }, [lastResultComparison]);
+
   const handleMoveCommit = useCallback((move: Move) => {
     dispatchGameSession({
       type: 'commitMove',
@@ -74,11 +87,17 @@ function App() {
   }, []);
 
   const handleScramble = useCallback(() => {
+    setIsResultDismissed(false);
     dispatchGameSession({ type: 'scramble', nowMs: performance.now() });
   }, []);
 
   const handleReset = useCallback(() => {
+    setIsResultDismissed(false);
     dispatchGameSession({ type: 'reset' });
+  }, []);
+
+  const handleResultClose = useCallback(() => {
+    setIsResultDismissed(true);
   }, []);
 
   return (
@@ -129,7 +148,9 @@ function App() {
             <span className="h-4 w-px bg-slate-200" aria-hidden="true" />
             <span>最佳</span>
             <strong className="font-mono text-lg font-semibold text-slate-900">
-              --:--.--
+              {bestResult
+                ? formatElapsedTime(bestResult.elapsedMs)
+                : '--:--.--'}
             </strong>
           </div>
 
@@ -160,6 +181,14 @@ function App() {
           </div>
         </footer>
       </div>
+
+      {lastResultComparison && !isResultDismissed ? (
+        <ResultDialog
+          comparison={lastResultComparison}
+          onClose={handleResultClose}
+          onPlayAgain={handleScramble}
+        />
+      ) : null}
     </main>
   );
 }

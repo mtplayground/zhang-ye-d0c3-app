@@ -21,12 +21,15 @@ import {
   startSolveSession,
   type SolveSessionState,
 } from './solveSession';
+import { compareResultWithBest, type ResultComparison } from './results';
 
 export type GameSessionState = {
   cubeState: CubeState;
   timer: TimerState;
   visibleElapsedMs: number;
   solveSession: SolveSessionState;
+  bestResult: SolveSessionState['result'];
+  lastResultComparison: ResultComparison | null;
 };
 
 export type GameSessionAction =
@@ -41,6 +44,8 @@ export function createInitialGameSession(): GameSessionState {
     timer: createIdleTimer(),
     visibleElapsedMs: 0,
     solveSession: createIdleSolveSession(),
+    bestResult: null,
+    lastResultComparison: null,
   };
 }
 
@@ -54,6 +59,8 @@ export function gameSessionReducer(
       timer: startTimer(action.nowMs),
       visibleElapsedMs: 0,
       solveSession: startSolveSession(),
+      bestResult: state.bestResult,
+      lastResultComparison: null,
     };
   }
 
@@ -63,6 +70,8 @@ export function gameSessionReducer(
       timer: resetTimer(),
       visibleElapsedMs: 0,
       solveSession: resetSolveSession(),
+      bestResult: state.bestResult,
+      lastResultComparison: null,
     };
   }
 
@@ -83,15 +92,23 @@ export function gameSessionReducer(
     timer.status === 'stopped'
       ? timer.elapsedMs
       : getElapsedMs(timer, action.nowMs);
+  const solveSession = recordEffectiveMove(state.solveSession, {
+    isSolved: solvedAfterMove,
+    elapsedMs: completionElapsedMs,
+  });
+  const completedResult =
+    state.solveSession.result === null ? solveSession.result : null;
+  const resultComparison = completedResult
+    ? compareResultWithBest(completedResult, state.bestResult)
+    : state.lastResultComparison;
 
   return {
     cubeState: nextCubeState,
     timer,
     visibleElapsedMs:
       timer.status === 'running' ? state.visibleElapsedMs : timer.elapsedMs,
-    solveSession: recordEffectiveMove(state.solveSession, {
-      isSolved: solvedAfterMove,
-      elapsedMs: completionElapsedMs,
-    }),
+    solveSession,
+    bestResult: resultComparison?.bestResult ?? state.bestResult,
+    lastResultComparison: resultComparison,
   };
 }
