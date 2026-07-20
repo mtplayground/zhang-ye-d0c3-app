@@ -1,12 +1,21 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
 import {
   CubeScene,
   applyMove,
   createScrambledCube,
   createSolvedCube,
+  isSolved,
   type Move,
 } from './features/cube';
+import {
+  createIdleTimer,
+  formatElapsedTime,
+  getElapsedMs,
+  resetTimer,
+  startTimer,
+  stopTimer,
+} from './features/session';
 
 type ActionButtonProps = {
   icon: React.ReactNode;
@@ -40,23 +49,60 @@ function ActionButton({
 
 function App() {
   const [cubeState, setCubeState] = useState(() => createSolvedCube());
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const [timer, setTimer] = useState(() => createIdleTimer());
+  const [visibleElapsedMs, setVisibleElapsedMs] = useState(0);
   const [moveCount, setMoveCount] = useState(0);
 
+  useEffect(() => {
+    if (timer.status !== 'running') {
+      setVisibleElapsedMs(timer.elapsedMs);
+      return;
+    }
+
+    let animationFrameId = 0;
+
+    const updateElapsed = () => {
+      setVisibleElapsedMs(getElapsedMs(timer, performance.now()));
+      animationFrameId = window.requestAnimationFrame(updateElapsed);
+    };
+
+    updateElapsed();
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [timer]);
+
   const handleMoveCommit = useCallback((move: Move) => {
-    setCubeState((currentState) => applyMove(currentState, move));
+    setCubeState((currentState) => {
+      const nextState = applyMove(currentState, move);
+
+      if (isSolved(nextState)) {
+        const nowMs = performance.now();
+
+        setTimer((currentTimer) => {
+          const stoppedTimer = stopTimer(currentTimer, nowMs);
+          setVisibleElapsedMs(stoppedTimer.elapsedMs);
+          return stoppedTimer;
+        });
+      }
+
+      return nextState;
+    });
     setMoveCount((currentMoveCount) => currentMoveCount + 1);
   }, []);
 
   const handleScramble = useCallback(() => {
     setCubeState(createScrambledCube());
-    setElapsedMs(0);
+    setTimer(startTimer(performance.now()));
+    setVisibleElapsedMs(0);
     setMoveCount(0);
   }, []);
 
   const handleReset = useCallback(() => {
     setCubeState(createSolvedCube());
-    setElapsedMs(0);
+    setTimer(resetTimer());
+    setVisibleElapsedMs(0);
     setMoveCount(0);
   }, []);
 
@@ -69,9 +115,10 @@ function App() {
           <section
             className="rounded-md border border-slate-200 bg-white px-5 py-3 text-center shadow-sm"
             aria-label="计时器"
+            data-timer-status={timer.status}
           >
             <div className="font-mono text-3xl font-semibold tabular-nums tracking-normal text-slate-950 sm:text-4xl">
-              {formatElapsedTime(elapsedMs)}
+              {formatElapsedTime(visibleElapsedMs)}
             </div>
           </section>
 
@@ -128,15 +175,6 @@ function App() {
       </div>
     </main>
   );
-}
-
-function formatElapsedTime(milliseconds: number) {
-  const totalCentiseconds = Math.floor(milliseconds / 10);
-  const minutes = Math.floor(totalCentiseconds / 6000);
-  const seconds = Math.floor((totalCentiseconds % 6000) / 100);
-  const centiseconds = totalCentiseconds % 100;
-
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
 export default App;
