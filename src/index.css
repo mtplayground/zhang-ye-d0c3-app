@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button {
+  font: inherit;
+}
+
+.cube-stage {
+  display: grid;
+  min-height: clamp(420px, 64vh, 680px);
+  place-items: center;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.06) 1px, transparent 1px), #f8fafc;
+  background-size: 36px 36px;
+  perspective: 1100px;
+}
+
+.cube-shell {
+  position: relative;
+  width: clamp(150px, 32vw, 250px);
+  aspect-ratio: 1;
+  transform: rotateX(-28deg) rotateY(38deg);
+  transform-style: preserve-3d;
+}
+
+.cube-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 6px;
+  border: 2px solid #0f172a;
+  background: #0f172a;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+}
+
+.cube-face-front {
+  transform: translateZ(calc(clamp(150px, 32vw, 250px) / 2));
+}
+
+.cube-face-top {
+  transform: rotateX(90deg) translateZ(calc(clamp(150px, 32vw, 250px) / 2));
+}
+
+.cube-face-right {
+  transform: rotateY(90deg) translateZ(calc(clamp(150px, 32vw, 250px) / 2));
+}
+
+.cube-face-front .sticker {
+  background: #16a34a;
+}
+
+.cube-face-top .sticker {
+  background: #f8fafc;
+}
+
+.cube-face-right .sticker {
+  background: #dc2626;
+}
+
+.sticker {
+  border-radius: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+}
+
+@media (max-width: 640px) {
+  .cube-stage {
+    min-height: 420px;
+  }
+}
