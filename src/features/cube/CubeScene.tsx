@@ -20,6 +20,13 @@ import {
 } from 'three';
 import type { CubeState, Vec3 } from './model';
 import { CLASSIC_CUBE_HEX, getRenderCubies } from './rendering';
+import {
+  beginOrbitDrag,
+  createOrbitState,
+  endOrbitDrag,
+  stepOrbitInertia,
+  updateOrbitDrag,
+} from './viewControls';
 
 type CubeSceneProps = {
   state: CubeState;
@@ -51,6 +58,7 @@ export function CubeScene({ state }: CubeSceneProps) {
       powerPreference: 'high-performance',
     });
     const cubeGroup = new Group();
+    const orbit = createOrbitState();
     cubeGroupRef.current = cubeGroup;
 
     camera.position.set(4.4, 3.4, 5.3);
@@ -61,7 +69,11 @@ export function CubeScene({ state }: CubeSceneProps) {
     renderer.shadowMap.type = PCFSoftShadowMap;
     renderer.setClearColor(0x000000, 0);
     renderer.domElement.dataset.testid = 'cube-webgl-canvas';
-    renderer.domElement.setAttribute('aria-label', '经典六色 3D 魔方');
+    renderer.domElement.dataset.interactionMode = 'view-orbit';
+    renderer.domElement.setAttribute(
+      'aria-label',
+      '可拖拽旋转视角的经典六色 3D 魔方',
+    );
 
     scene.add(cubeGroup);
     scene.add(new AmbientLight(0xffffff, 1.6));
@@ -96,13 +108,53 @@ export function CubeScene({ state }: CubeSceneProps) {
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(host);
 
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return;
+      }
+
+      beginOrbitDrag(orbit, pointFromPointerEvent(event));
+      renderer.domElement.setPointerCapture(event.pointerId);
+      renderer.domElement.classList.add('is-dragging');
+      event.preventDefault();
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      updateOrbitDrag(orbit, pointFromPointerEvent(event));
+
+      if (orbit.dragging) {
+        event.preventDefault();
+      }
+    };
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      endOrbitDrag(orbit);
+      renderer.domElement.classList.remove('is-dragging');
+
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+        renderer.domElement.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    renderer.domElement.addEventListener('pointermove', handlePointerMove);
+    renderer.domElement.addEventListener('pointerup', handlePointerEnd);
+    renderer.domElement.addEventListener('pointercancel', handlePointerEnd);
+    renderer.domElement.addEventListener(
+      'lostpointercapture',
+      handlePointerEnd,
+    );
+
     let animationFrame = 0;
-    const startedAt = performance.now();
+    let previousFrameTime = performance.now();
 
     const render = (time: number) => {
-      const elapsed = (time - startedAt) / 1000;
-      cubeGroup.rotation.y = 0.52 + Math.sin(elapsed * 0.24) * 0.08;
-      cubeGroup.rotation.x = -0.22 + Math.sin(elapsed * 0.18) * 0.025;
+      const deltaMs = time - previousFrameTime;
+      previousFrameTime = time;
+      stepOrbitInertia(orbit, deltaMs);
+      cubeGroup.rotation.y = orbit.yaw;
+      cubeGroup.rotation.x = orbit.pitch;
+      cubeGroup.rotation.z = 0.02;
       renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(render);
     };
@@ -111,6 +163,17 @@ export function CubeScene({ state }: CubeSceneProps) {
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      renderer.domElement.removeEventListener('pointermove', handlePointerMove);
+      renderer.domElement.removeEventListener('pointerup', handlePointerEnd);
+      renderer.domElement.removeEventListener(
+        'pointercancel',
+        handlePointerEnd,
+      );
+      renderer.domElement.removeEventListener(
+        'lostpointercapture',
+        handlePointerEnd,
+      );
       resizeObserver.disconnect();
       host.removeChild(renderer.domElement);
       disposeGroup(cubeGroup);
@@ -134,6 +197,13 @@ export function CubeScene({ state }: CubeSceneProps) {
       data-testid="cube-canvas-host"
     />
   );
+}
+
+function pointFromPointerEvent(event: PointerEvent) {
+  return {
+    x: event.clientX,
+    y: event.clientY,
+  };
 }
 
 function rebuildCubeGroup(group: Group, state: CubeState) {
