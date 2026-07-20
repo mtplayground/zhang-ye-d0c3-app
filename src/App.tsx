@@ -1,6 +1,11 @@
-import { useMemo } from 'react';
+import { useCallback, useState } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
-import { CubeScene, createSolvedCube } from './features/cube';
+import {
+  CubeScene,
+  applyMove,
+  createSolvedCube,
+  type Move,
+} from './features/cube';
 
 type ActionButtonProps = {
   icon: React.ReactNode;
@@ -30,7 +35,10 @@ function ActionButton({
 }
 
 function App() {
-  const cubeState = useMemo(() => createSolvedCube(), []);
+  const [cubeState, setCubeState] = useState(() => createSolvedCube());
+  const handleMoveCommit = useCallback((move: Move) => {
+    setCubeState((currentState) => applyMove(currentState, move));
+  }, []);
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -65,7 +73,7 @@ function App() {
               <div className="absolute left-5 top-5 z-10 rounded-md border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-600 shadow-sm backdrop-blur">
                 经典六色 3D 魔方
               </div>
-              <CubeScene state={cubeState} />
+              <CubeScene state={cubeState} onMoveCommit={handleMoveCommit} />
             </div>
           </div>
         </section>
