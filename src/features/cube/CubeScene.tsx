@@ -38,6 +38,7 @@ import { moveToNotation } from './moves';
 import { DEFAULT_CUBE_THEME, type CubeTheme } from './themes';
 import {
   beginOrbitDrag,
+  cancelOrbitMotion,
   createOrbitState,
   endOrbitDrag,
   stepOrbitInertia,
@@ -48,6 +49,7 @@ type CubeSceneProps = {
   state: CubeState;
   theme?: CubeTheme;
   onMoveCommit?: (move: Move) => void;
+  onInteractionBusyChange?: (isBusy: boolean) => void;
 };
 
 type LayerGesture = {
@@ -77,14 +79,20 @@ export function CubeScene({
   state,
   theme = DEFAULT_CUBE_THEME,
   onMoveCommit,
+  onInteractionBusyChange,
 }: CubeSceneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cubeGroupRef = useRef<Group | null>(null);
   const onMoveCommitRef = useRef(onMoveCommit);
+  const onInteractionBusyChangeRef = useRef(onInteractionBusyChange);
 
   useEffect(() => {
     onMoveCommitRef.current = onMoveCommit;
   }, [onMoveCommit]);
+
+  useEffect(() => {
+    onInteractionBusyChangeRef.current = onInteractionBusyChange;
+  }, [onInteractionBusyChange]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -107,6 +115,7 @@ export function CubeScene({
     const pointer = new Vector2();
     let layerGesture: LayerGesture | null = null;
     let activeLayerTurn: LayerTurnAnimation | null = null;
+    let activePointerId: number | null = null;
     cubeGroupRef.current = cubeGroup;
 
     camera.position.set(4.4, 3.4, 5.3);
@@ -156,8 +165,38 @@ export function CubeScene({
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(host);
 
+    const setInteractionBusy = (isBusy: boolean) => {
+      onInteractionBusyChangeRef.current?.(isBusy);
+      renderer.domElement.dataset.isBusy = String(isBusy);
+    };
+
+    const releasePointerCapture = (pointerId: number) => {
+      if (renderer.domElement.hasPointerCapture(pointerId)) {
+        renderer.domElement.releasePointerCapture(pointerId);
+      }
+    };
+
+    const clearPointerClasses = () => {
+      renderer.domElement.classList.remove('is-dragging');
+      renderer.domElement.classList.remove('is-turning-candidate');
+    };
+
+    const startLayerTurnFromMove = (move: Move, startedAt: number) => {
+      const turn = startLayerTurn(cubeGroup, move, startedAt);
+
+      if (!turn) {
+        return false;
+      }
+
+      cancelOrbitMotion(orbit);
+      activeLayerTurn = turn;
+      renderer.domElement.dataset.interactionMode = 'layer-turn';
+      setInteractionBusy(true);
+      return true;
+    };
+
     const handlePointerDown = (event: PointerEvent) => {
-      if (activeLayerTurn) {
+      if (activeLayerTurn || activePointerId !== null) {
         return;
       }
 
@@ -180,6 +219,7 @@ export function CubeScene({
           startPoint: pointFromPointerEvent(event),
           hit,
         };
+        activePointerId = event.pointerId;
         renderer.domElement.setPointerCapture(event.pointerId);
         renderer.domElement.classList.add('is-turning-candidate');
         event.preventDefault();
@@ -187,12 +227,17 @@ export function CubeScene({
       }
 
       beginOrbitDrag(orbit, pointFromPointerEvent(event));
+      activePointerId = event.pointerId;
       renderer.domElement.setPointerCapture(event.pointerId);
       renderer.domElement.classList.add('is-dragging');
       event.preventDefault();
     };
 
     const handlePointerMove = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) {
+        return;
+      }
+
       if (layerGesture?.pointerId === event.pointerId) {
         const point = pointFromPointerEvent(event);
         const drag = {
@@ -208,12 +253,7 @@ export function CubeScene({
           );
 
           if (move) {
-            activeLayerTurn = startLayerTurn(
-              cubeGroup,
-              move,
-              performance.now(),
-            );
-            renderer.domElement.dataset.interactionMode = 'layer-turn';
+            startLayerTurnFromMove(move, performance.now());
           }
 
           layerGesture = null;
@@ -231,33 +271,45 @@ export function CubeScene({
       }
     };
 
-    const handlePointerEnd = (event: PointerEvent) => {
+    const handlePointerUp = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) {
+        return;
+      }
+
       if (layerGesture?.pointerId === event.pointerId) {
-        activeLayerTurn = startLayerTurn(
-          cubeGroup,
+        startLayerTurnFromMove(
           createClickLayerMove(layerGesture.hit),
           performance.now(),
         );
-        renderer.domElement.dataset.interactionMode = 'layer-turn';
         layerGesture = null;
       }
 
       endOrbitDrag(orbit);
-      renderer.domElement.classList.remove('is-dragging');
-      renderer.domElement.classList.remove('is-turning-candidate');
+      clearPointerClasses();
+      activePointerId = null;
+      releasePointerCapture(event.pointerId);
+    };
 
-      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-        renderer.domElement.releasePointerCapture(event.pointerId);
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) {
+        return;
       }
+
+      layerGesture = null;
+      activePointerId = null;
+      cancelOrbitMotion(orbit);
+      clearPointerClasses();
+      releasePointerCapture(event.pointerId);
+      renderer.domElement.dataset.interactionMode = 'view-orbit';
     };
 
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
     renderer.domElement.addEventListener('pointermove', handlePointerMove);
-    renderer.domElement.addEventListener('pointerup', handlePointerEnd);
-    renderer.domElement.addEventListener('pointercancel', handlePointerEnd);
+    renderer.domElement.addEventListener('pointerup', handlePointerUp);
+    renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
     renderer.domElement.addEventListener(
       'lostpointercapture',
-      handlePointerEnd,
+      handlePointerCancel,
     );
 
     let animationFrame = 0;
@@ -274,6 +326,7 @@ export function CubeScene({
       if (completedTurn) {
         activeLayerTurn = null;
         renderer.domElement.dataset.interactionMode = 'view-orbit';
+        setInteractionBusy(false);
         committedMoveCount += 1;
         renderer.domElement.dataset.moveCount = String(committedMoveCount);
         renderer.domElement.dataset.lastMove = moveToNotation(
@@ -299,15 +352,16 @@ export function CubeScene({
       window.cancelAnimationFrame(animationFrame);
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       renderer.domElement.removeEventListener('pointermove', handlePointerMove);
-      renderer.domElement.removeEventListener('pointerup', handlePointerEnd);
+      renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       renderer.domElement.removeEventListener(
         'pointercancel',
-        handlePointerEnd,
+        handlePointerCancel,
       );
       renderer.domElement.removeEventListener(
         'lostpointercapture',
-        handlePointerEnd,
+        handlePointerCancel,
       );
+      setInteractionBusy(false);
       resizeObserver.disconnect();
       host.removeChild(renderer.domElement);
       disposeGroup(cubeGroup);

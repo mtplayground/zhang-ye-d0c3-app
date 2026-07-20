@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   beginOrbitDrag,
+  cancelOrbitMotion,
   createOrbitState,
   endOrbitDrag,
   stepOrbitInertia,
@@ -47,6 +48,19 @@ describe('view orbit controls', () => {
     updateOrbitDrag(orbit, { x: 0, y: -100 }, { minPitch: -0.2 });
 
     expect(orbit.pitch).toBe(-0.2);
+    expect(orbit.velocityPitch).toBe(0);
+  });
+
+  it('can cancel active drag and inertia before a layer turn starts', () => {
+    const orbit = createOrbitState({ yaw: 0, pitch: 0 });
+
+    beginOrbitDrag(orbit, { x: 0, y: 0 });
+    updateOrbitDrag(orbit, { x: 24, y: 16 });
+    cancelOrbitMotion(orbit);
+
+    expect(orbit.dragging).toBe(false);
+    expect(orbit.lastPoint).toBeNull();
+    expect(orbit.velocityYaw).toBe(0);
     expect(orbit.velocityPitch).toBe(0);
   });
 });

@@ -25,7 +25,8 @@ button {
 
 .cube-canvas-host {
   display: grid;
-  min-height: clamp(420px, 64vh, 680px);
+  height: clamp(340px, 60dvh, 680px);
+  min-height: 320px;
   place-items: center;
   background:
     linear-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px),
@@ -38,8 +39,11 @@ button {
   cursor: grab;
   display: block;
   height: 100%;
+  overscroll-behavior: contain;
   touch-action: none;
+  user-select: none;
   width: 100%;
+  -webkit-user-select: none;
 }
 
 .cube-canvas-host canvas.is-dragging {
@@ -48,6 +52,14 @@ button {
 
 @media (max-width: 640px) {
   .cube-canvas-host {
-    min-height: 420px;
+    height: clamp(320px, 54dvh, 430px);
+    min-height: 300px;
+  }
+}
+
+@media (max-height: 700px) {
+  .cube-canvas-host {
+    height: clamp(300px, 50dvh, 520px);
+    min-height: 280px;
   }
 }
