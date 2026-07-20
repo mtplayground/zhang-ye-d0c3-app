@@ -85,6 +85,53 @@ describe('game session reducer', () => {
         moveCount: 1,
       },
     });
+    expect(completed.bestResult).toEqual({
+      elapsedMs: 1475.25,
+      moveCount: 1,
+    });
+    expect(completed.lastResultComparison).toMatchObject({
+      isFirstResult: true,
+      isNewBest: true,
+      timeDeltaMs: null,
+      moveDelta: null,
+    });
+  });
+
+  it('compares later completions with the previous best', () => {
+    const firstScramble = applyMove(createSolvedCube(), move('R'));
+    const firstStarted = gameSessionReducer(createInitialGameSession(), {
+      type: 'scramble',
+      nowMs: 1000,
+      cubeState: firstScramble,
+    });
+    const firstCompleted = gameSessionReducer(firstStarted, {
+      type: 'commitMove',
+      move: move('R', 'counterclockwise'),
+      nowMs: 2500,
+    });
+
+    const secondScramble = applyMove(createSolvedCube(), move('U'));
+    const secondStarted = gameSessionReducer(firstCompleted, {
+      type: 'scramble',
+      nowMs: 3000,
+      cubeState: secondScramble,
+    });
+    const secondCompleted = gameSessionReducer(secondStarted, {
+      type: 'commitMove',
+      move: move('U', 'counterclockwise'),
+      nowMs: 4100,
+    });
+
+    expect(secondCompleted.bestResult).toEqual({
+      elapsedMs: 1100,
+      moveCount: 1,
+    });
+    expect(secondCompleted.lastResultComparison).toMatchObject({
+      isFirstResult: false,
+      isNewBest: true,
+      timeDeltaMs: -400,
+      moveDelta: 0,
+    });
   });
 
   it('resets cube, timer, move count, and completion result', () => {
@@ -104,5 +151,7 @@ describe('game session reducer', () => {
       moveCount: 0,
       result: null,
     });
+    expect(reset.bestResult).toBeNull();
+    expect(reset.lastResultComparison).toBeNull();
   });
 });
