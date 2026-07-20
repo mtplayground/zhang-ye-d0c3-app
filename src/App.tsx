@@ -3,6 +3,7 @@ import { Palette, RotateCcw, Shuffle } from 'lucide-react';
 import {
   CubeScene,
   applyMove,
+  createScrambledCube,
   createSolvedCube,
   type Move,
 } from './features/cube';
@@ -10,12 +11,14 @@ import {
 type ActionButtonProps = {
   icon: React.ReactNode;
   label: string;
+  onClick?: () => void;
   variant?: 'primary' | 'secondary';
 };
 
 function ActionButton({
   icon,
   label,
+  onClick,
   variant = 'secondary',
 }: ActionButtonProps) {
   const variantClass =
@@ -26,6 +29,7 @@ function ActionButton({
   return (
     <button
       type="button"
+      onClick={onClick}
       className={`inline-flex h-11 min-w-28 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium shadow-sm transition ${variantClass}`}
     >
       {icon}
@@ -36,8 +40,24 @@ function ActionButton({
 
 function App() {
   const [cubeState, setCubeState] = useState(() => createSolvedCube());
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [moveCount, setMoveCount] = useState(0);
+
   const handleMoveCommit = useCallback((move: Move) => {
     setCubeState((currentState) => applyMove(currentState, move));
+    setMoveCount((currentMoveCount) => currentMoveCount + 1);
+  }, []);
+
+  const handleScramble = useCallback(() => {
+    setCubeState(createScrambledCube());
+    setElapsedMs(0);
+    setMoveCount(0);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setCubeState(createSolvedCube());
+    setElapsedMs(0);
+    setMoveCount(0);
   }, []);
 
   return (
@@ -51,7 +71,7 @@ function App() {
             aria-label="计时器"
           >
             <div className="font-mono text-3xl font-semibold tabular-nums tracking-normal text-slate-950 sm:text-4xl">
-              00:00.00
+              {formatElapsedTime(elapsedMs)}
             </div>
           </section>
 
@@ -82,7 +102,7 @@ function App() {
           <div className="flex items-center gap-3 text-sm text-slate-500">
             <span>步数</span>
             <strong className="font-mono text-lg font-semibold text-slate-900">
-              0
+              {moveCount}
             </strong>
             <span className="h-4 w-px bg-slate-200" aria-hidden="true" />
             <span>最佳</span>
@@ -95,17 +115,28 @@ function App() {
             <ActionButton
               icon={<Shuffle className="size-4" aria-hidden="true" />}
               label="打乱"
+              onClick={handleScramble}
               variant="primary"
             />
             <ActionButton
               icon={<RotateCcw className="size-4" aria-hidden="true" />}
               label="重置"
+              onClick={handleReset}
             />
           </div>
         </footer>
       </div>
     </main>
   );
+}
+
+function formatElapsedTime(milliseconds: number) {
+  const totalCentiseconds = Math.floor(milliseconds / 10);
+  const minutes = Math.floor(totalCentiseconds / 6000);
+  const seconds = Math.floor((totalCentiseconds % 6000) / 100);
+  const centiseconds = totalCentiseconds % 100;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
 export default App;
