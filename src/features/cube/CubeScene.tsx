@@ -33,8 +33,9 @@ import {
   type LayerHit,
   type ScreenVector,
 } from './layerInteraction';
-import { CLASSIC_CUBE_HEX, getRenderCubies } from './rendering';
+import { getRenderCubies } from './rendering';
 import { moveToNotation } from './moves';
+import { DEFAULT_CUBE_THEME, type CubeTheme } from './themes';
 import {
   beginOrbitDrag,
   createOrbitState,
@@ -45,6 +46,7 @@ import {
 
 type CubeSceneProps = {
   state: CubeState;
+  theme?: CubeTheme;
   onMoveCommit?: (move: Move) => void;
 };
 
@@ -71,7 +73,11 @@ const BASE_NORMAL = new Vector3(0, 0, 1);
 const LAYER_DRAG_THRESHOLD_PX = 12;
 const LAYER_TURN_DURATION_MS = 210;
 
-export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
+export function CubeScene({
+  state,
+  theme = DEFAULT_CUBE_THEME,
+  onMoveCommit,
+}: CubeSceneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cubeGroupRef = useRef<Group | null>(null);
   const onMoveCommitRef = useRef(onMoveCommit);
@@ -315,8 +321,8 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
       return;
     }
 
-    rebuildCubeGroup(cubeGroupRef.current, state);
-  }, [state]);
+    rebuildCubeGroup(cubeGroupRef.current, state, theme);
+  }, [state, theme]);
 
   return (
     <div
@@ -453,7 +459,7 @@ function isLayerHitData(value: unknown): value is LayerHit {
   return Boolean(candidate.position && candidate.normal);
 }
 
-function rebuildCubeGroup(group: Group, state: CubeState) {
+function rebuildCubeGroup(group: Group, state: CubeState, theme: CubeTheme) {
   disposeGroup(group);
 
   const cubieGeometry = new BoxGeometry(CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE);
@@ -483,7 +489,7 @@ function rebuildCubeGroup(group: Group, state: CubeState) {
       const normal = vectorFromVec3(sticker.normal);
       const stickerMesh = new Mesh(
         stickerGeometry,
-        createStickerMaterial(CLASSIC_CUBE_HEX[sticker.color]),
+        createStickerMaterial(theme.colors[sticker.color]),
       );
 
       stickerMesh.userData.layerHit = {

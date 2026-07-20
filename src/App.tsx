@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { Palette, RotateCcw, Shuffle } from 'lucide-react';
-import { CubeScene, type Move } from './features/cube';
+import { Check, Palette, RotateCcw, Shuffle } from 'lucide-react';
+import {
+  CUBE_THEMES,
+  CubeScene,
+  DEFAULT_CUBE_THEME_ID,
+  getCubeTheme,
+  loadCubeThemePreference,
+  saveCubeThemePreference,
+  type CubeTheme,
+  type CubeThemeId,
+  type Move,
+} from './features/cube';
 import {
   ResultDialog,
   appendSolveResult,
@@ -58,7 +68,11 @@ function App() {
   } = gameSession;
   const completionResult = solveSession.result;
   const [isResultDismissed, setIsResultDismissed] = useState(false);
+  const [themeId, setThemeId] = useState<CubeThemeId>(DEFAULT_CUBE_THEME_ID);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const savedResultKeyRef = useRef<string | null>(null);
+  const themeMenuRef = useRef<HTMLDivElement | null>(null);
+  const cubeTheme = getCubeTheme(themeId);
 
   useEffect(() => {
     const history = loadSolveHistory();
@@ -69,6 +83,35 @@ function App() {
       bestResult: storedBestResult,
     });
   }, []);
+
+  useEffect(() => {
+    setThemeId(loadCubeThemePreference());
+  }, []);
+
+  useEffect(() => {
+    if (!isThemeMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!themeMenuRef.current?.contains(event.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsThemeMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isThemeMenuOpen]);
 
   useEffect(() => {
     if (timer.status !== 'running') {
@@ -140,6 +183,12 @@ function App() {
     setIsResultDismissed(true);
   }, []);
 
+  const handleThemeChange = useCallback((nextThemeId: CubeThemeId) => {
+    setThemeId(nextThemeId);
+    saveCubeThemePreference(nextThemeId);
+    setIsThemeMenuOpen(false);
+  }, []);
+
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-5 sm:px-7 lg:px-10">
@@ -156,15 +205,37 @@ function App() {
             </div>
           </section>
 
-          <div className="flex justify-end">
+          <div className="relative flex justify-end" ref={themeMenuRef}>
             <button
               type="button"
               className="inline-flex size-11 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               aria-label="切换配色主题"
+              aria-haspopup="menu"
+              aria-expanded={isThemeMenuOpen}
               title="切换配色主题"
+              onClick={() =>
+                setIsThemeMenuOpen((currentIsOpen) => !currentIsOpen)
+              }
             >
               <Palette className="size-5" aria-hidden="true" />
             </button>
+
+            {isThemeMenuOpen ? (
+              <div
+                className="absolute right-0 top-12 z-30 w-72 rounded-lg border border-slate-200 bg-white p-2 text-left shadow-xl"
+                role="menu"
+                aria-label="选择魔方配色主题"
+              >
+                {CUBE_THEMES.map((theme) => (
+                  <ThemeMenuItem
+                    key={theme.id}
+                    theme={theme}
+                    selected={theme.id === themeId}
+                    onSelect={handleThemeChange}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         </header>
 
@@ -174,7 +245,11 @@ function App() {
               <div className="absolute left-5 top-5 z-10 rounded-md border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-600 shadow-sm backdrop-blur">
                 经典六色 3D 魔方
               </div>
-              <CubeScene state={cubeState} onMoveCommit={handleMoveCommit} />
+              <CubeScene
+                state={cubeState}
+                theme={cubeTheme}
+                onMoveCommit={handleMoveCommit}
+              />
             </div>
           </div>
         </section>
@@ -230,6 +305,50 @@ function App() {
         />
       ) : null}
     </main>
+  );
+}
+
+function ThemeMenuItem({
+  theme,
+  selected,
+  onSelect,
+}: {
+  theme: CubeTheme;
+  selected: boolean;
+  onSelect: (themeId: CubeThemeId) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition hover:bg-slate-50"
+      role="menuitemradio"
+      aria-checked={selected}
+      onClick={() => onSelect(theme.id)}
+    >
+      <span className="grid grid-cols-3 gap-0.5" aria-hidden="true">
+        {Object.values(theme.colors).map((color) => (
+          <span
+            key={color}
+            className="size-3 rounded-sm border border-slate-200"
+            style={{ backgroundColor: color }}
+          />
+        ))}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-slate-800">
+          {theme.name}
+        </span>
+        <span className="block truncate text-xs text-slate-500">
+          {theme.description}
+        </span>
+      </span>
+      {selected ? (
+        <Check
+          className="size-4 shrink-0 text-emerald-600"
+          aria-hidden="true"
+        />
+      ) : null}
+    </button>
   );
 }
 
