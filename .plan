@@ -1,0 +1,73 @@
+# Architecture Plan
+
+## Product Scope
+
+Build a single page Rubik's Cube application. The product brand/name is taken from GitHub issue content when a product name is explicitly needed; the current issue set only defines a classic six-color cube experience.
+
+## Proposed Stack
+
+- Frontend: a Vite-based SPA, preferably React + TypeScript unless a later issue specifies another framework.
+- Rendering: Three.js via `@react-three/fiber` for the 3D cube, camera, raycasting, and animation.
+- State: local reducer/store modules with serializable cube state and derived selectors.
+- Tests: Vitest for cube engine/unit behavior and Playwright for end-to-end flow.
+- Persistence: `localStorage` for history best records and theme selection.
+
+## Module Structure
+
+- `src/app/`
+  - Application shell, route-less page layout, top-level providers, and composition.
+- `src/features/cube/`
+  - `model.ts`: shared cube types, face/color identifiers, cubie positions, move notation, solved-state helpers.
+  - `moves.ts`: deterministic layer turn engine, inverse moves, move normalization, scramble sequence generation.
+  - `selectors.ts`: solved checks, move count helpers, render projection data.
+  - `CubeScene.tsx`: Three.js scene composition for the cube.
+  - `CubePiece.tsx`: cubie mesh rendering and sticker materials.
+  - `interaction.ts`: pointer gesture interpretation for camera orbit and layer turns.
+- `src/features/session/`
+  - Timer state, scramble lifecycle, solve completion lifecycle, move counting, result model.
+- `src/features/history/`
+  - Best-time storage, history serialization, migration/default handling.
+- `src/features/theme/`
+  - Color palettes, active theme state, persistence, and UI entry point.
+- `src/components/`
+  - Reusable controls, toolbar buttons, result dialog, compact stats display.
+- `src/tests/`
+  - Unit tests for engine/session behavior and E2E specs for the full solve flow.
+
+## Shared Types
+
+- `Face = 'U' | 'D' | 'L' | 'R' | 'F' | 'B'`
+- `Axis = 'x' | 'y' | 'z'`
+- `Layer = -1 | 0 | 1`
+- `TurnDirection = 1 | -1`
+- `Move = { face: Face; direction: TurnDirection; amount: 1 | 2 }`
+- `Cubie = { id: string; position: Vec3; stickers: Partial<Record<Face, ColorKey>> }`
+- `CubeState = { cubies: Cubie[]; moveHistory: Move[] }`
+- `SessionState = { status: 'idle' | 'scrambled' | 'solving' | 'complete'; startedAt?: number; elapsedMs: number; moveCount: number; scramble: Move[] }`
+- `Result = { elapsedMs: number; moveCount: number; completedAt: string; scramble: Move[] }`
+
+## Issue Dependencies
+
+- #1 initializes the SPA shell, base layout, build/test scripts, and visual frame used by all later issues.
+- #2 is the core dependency for every cube behavior: state model, move engine, solved state, and tests.
+- #3 depends on #1 and #2 to render the cube from real state instead of placeholder geometry.
+- #4 depends on #3 for camera/pointer integration.
+- #5 depends on #2, #3, and #4 because layer turns need raycast hit data and gesture direction mapping.
+- #6 depends on #2 for legal random move generation and applies to session startup.
+- #7 depends on #6 for scramble-start timing and #2 for solved detection.
+- #8 depends on #2, #5, and #7 for move counting and solve completion.
+- #9 depends on #7 and #8 for complete result data.
+- #10 depends on #9 for persisted result records.
+- #11 can be developed after #3, but should use the render material abstraction planned up front.
+- #12 depends on the main user flow from #1 through #10.
+- #13 follows all user-facing features and focuses on animation feel, viewport sizing, browser compatibility, and stability.
+
+## Key Design Decisions
+
+- Keep cube state pure and renderer-agnostic. The move engine should be testable without DOM, canvas, or Three.js.
+- Render from state projection data rather than storing visual-only orientation as source of truth.
+- Use a single session reducer for scramble, timer, moves, solved detection, and completion to avoid cross-component lifecycle drift.
+- Treat animations as presentation over committed state transitions. User input should queue or lock during active layer animations to prevent invalid states.
+- Store history and theme in small versioned `localStorage` records so future schema changes are manageable.
+- Build E2E tests around user-visible flows: load app, scramble, make moves, detect completion, show result, persist best record, switch theme.
+- Avoid server-side assumptions unless a later issue introduces backend behavior; this app should deploy as static assets behind the Ideavibes proxy.
