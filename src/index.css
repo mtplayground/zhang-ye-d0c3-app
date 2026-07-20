@@ -35,9 +35,15 @@ button {
 }
 
 .cube-canvas-host canvas {
+  cursor: grab;
   display: block;
   height: 100%;
+  touch-action: none;
   width: 100%;
+}
+
+.cube-canvas-host canvas.is-dragging {
+  cursor: grabbing;
 }
 
 @media (max-width: 640px) {
