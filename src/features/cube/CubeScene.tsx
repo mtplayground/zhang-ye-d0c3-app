@@ -13,28 +13,13 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Quaternion,
-  Raycaster,
   Scene,
   SRGBColorSpace,
-  Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
-import {
-  FACE_SPECS,
-  type Axis,
-  type CubeState,
-  type Move,
-  type Vec3,
-} from './model';
-import {
-  createClickLayerMove,
-  resolveLayerMoveFromDrag,
-  type LayerHit,
-  type ScreenVector,
-} from './layerInteraction';
+import type { CubeState, Vec3 } from './model';
 import { CLASSIC_CUBE_HEX, getRenderCubies } from './rendering';
-import { moveToNotation } from './moves';
 import {
   beginOrbitDrag,
   createOrbitState,
@@ -45,22 +30,6 @@ import {
 
 type CubeSceneProps = {
   state: CubeState;
-  onMoveCommit?: (move: Move) => void;
-};
-
-type LayerGesture = {
-  pointerId: number;
-  startPoint: ScreenVector;
-  hit: LayerHit;
-};
-
-type LayerTurnAnimation = {
-  move: Move;
-  pivot: Group;
-  axis: Axis;
-  targetAngle: number;
-  startedAt: number;
-  durationMs: number;
 };
 
 const CUBIE_SIZE = 0.92;
@@ -68,17 +37,10 @@ const CUBIE_SPACING = 1.02;
 const STICKER_SIZE = 0.66;
 const STICKER_OFFSET = CUBIE_SIZE / 2 + 0.006;
 const BASE_NORMAL = new Vector3(0, 0, 1);
-const LAYER_DRAG_THRESHOLD_PX = 12;
-const LAYER_TURN_DURATION_MS = 210;
 
-export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
+export function CubeScene({ state }: CubeSceneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cubeGroupRef = useRef<Group | null>(null);
-  const onMoveCommitRef = useRef(onMoveCommit);
-
-  useEffect(() => {
-    onMoveCommitRef.current = onMoveCommit;
-  }, [onMoveCommit]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -97,10 +59,6 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
     });
     const cubeGroup = new Group();
     const orbit = createOrbitState();
-    const raycaster = new Raycaster();
-    const pointer = new Vector2();
-    let layerGesture: LayerGesture | null = null;
-    let activeLayerTurn: LayerTurnAnimation | null = null;
     cubeGroupRef.current = cubeGroup;
 
     camera.position.set(4.4, 3.4, 5.3);
@@ -151,32 +109,7 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
     resizeObserver.observe(host);
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (activeLayerTurn) {
-        return;
-      }
-
       if (event.pointerType === 'mouse' && event.button !== 0) {
-        return;
-      }
-
-      const hit = pickLayerHit(
-        event,
-        renderer.domElement,
-        camera,
-        cubeGroup,
-        raycaster,
-        pointer,
-      );
-
-      if (hit) {
-        layerGesture = {
-          pointerId: event.pointerId,
-          startPoint: pointFromPointerEvent(event),
-          hit,
-        };
-        renderer.domElement.setPointerCapture(event.pointerId);
-        renderer.domElement.classList.add('is-turning-candidate');
-        event.preventDefault();
         return;
       }
 
@@ -187,37 +120,6 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (layerGesture?.pointerId === event.pointerId) {
-        const point = pointFromPointerEvent(event);
-        const drag = {
-          x: point.x - layerGesture.startPoint.x,
-          y: point.y - layerGesture.startPoint.y,
-        };
-
-        if (Math.hypot(drag.x, drag.y) >= LAYER_DRAG_THRESHOLD_PX) {
-          const move = resolveLayerMoveFromDrag(
-            layerGesture.hit,
-            drag,
-            (tangent) => projectCubeTangentToScreen(tangent, camera, cubeGroup),
-          );
-
-          if (move) {
-            activeLayerTurn = startLayerTurn(
-              cubeGroup,
-              move,
-              performance.now(),
-            );
-            renderer.domElement.dataset.interactionMode = 'layer-turn';
-          }
-
-          layerGesture = null;
-          renderer.domElement.classList.remove('is-turning-candidate');
-        }
-
-        event.preventDefault();
-        return;
-      }
-
       updateOrbitDrag(orbit, pointFromPointerEvent(event));
 
       if (orbit.dragging) {
@@ -226,19 +128,8 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
     };
 
     const handlePointerEnd = (event: PointerEvent) => {
-      if (layerGesture?.pointerId === event.pointerId) {
-        activeLayerTurn = startLayerTurn(
-          cubeGroup,
-          createClickLayerMove(layerGesture.hit),
-          performance.now(),
-        );
-        renderer.domElement.dataset.interactionMode = 'layer-turn';
-        layerGesture = null;
-      }
-
       endOrbitDrag(orbit);
       renderer.domElement.classList.remove('is-dragging');
-      renderer.domElement.classList.remove('is-turning-candidate');
 
       if (renderer.domElement.hasPointerCapture(event.pointerId)) {
         renderer.domElement.releasePointerCapture(event.pointerId);
@@ -256,30 +147,11 @@ export function CubeScene({ state, onMoveCommit }: CubeSceneProps) {
 
     let animationFrame = 0;
     let previousFrameTime = performance.now();
-    let committedMoveCount = 0;
 
     const render = (time: number) => {
       const deltaMs = time - previousFrameTime;
       previousFrameTime = time;
-      const completedTurn = activeLayerTurn
-        ? updateLayerTurnAnimation(activeLayerTurn, time)
-        : null;
-
-      if (completedTurn) {
-        activeLayerTurn = null;
-        renderer.domElement.dataset.interactionMode = 'view-orbit';
-        committedMoveCount += 1;
-        renderer.domElement.dataset.moveCount = String(committedMoveCount);
-        renderer.domElement.dataset.lastMove = moveToNotation(
-          completedTurn.move,
-        );
-        onMoveCommitRef.current?.(completedTurn.move);
-      }
-
-      if (!activeLayerTurn) {
-        stepOrbitInertia(orbit, deltaMs);
-      }
-
+      stepOrbitInertia(orbit, deltaMs);
       cubeGroup.rotation.y = orbit.yaw;
       cubeGroup.rotation.x = orbit.pitch;
       cubeGroup.rotation.z = 0.02;
@@ -334,125 +206,6 @@ function pointFromPointerEvent(event: PointerEvent) {
   };
 }
 
-function pickLayerHit(
-  event: PointerEvent,
-  canvas: HTMLCanvasElement,
-  camera: PerspectiveCamera,
-  cubeGroup: Group,
-  raycaster: Raycaster,
-  pointer: Vector2,
-): LayerHit | null {
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  cubeGroup.updateMatrixWorld(true);
-  raycaster.setFromCamera(pointer, camera);
-
-  const intersections = raycaster.intersectObjects(cubeGroup.children, true);
-  const stickerIntersection = intersections.find((intersection) =>
-    isLayerHitData(intersection.object.userData.layerHit),
-  );
-
-  return stickerIntersection?.object.userData.layerHit ?? null;
-}
-
-function projectCubeTangentToScreen(
-  tangent: Vec3,
-  camera: PerspectiveCamera,
-  cubeGroup: Group,
-): ScreenVector | null {
-  const origin = new Vector3(0, 0, 0);
-  const endpoint = new Vector3(tangent.x, tangent.y, tangent.z);
-
-  cubeGroup.localToWorld(origin);
-  cubeGroup.localToWorld(endpoint);
-  origin.project(camera);
-  endpoint.project(camera);
-
-  const screenVector = {
-    x: endpoint.x - origin.x,
-    y: origin.y - endpoint.y,
-  };
-
-  if (Math.hypot(screenVector.x, screenVector.y) < 0.0001) {
-    return null;
-  }
-
-  return screenVector;
-}
-
-function startLayerTurn(
-  cubeGroup: Group,
-  move: Move,
-  startedAt: number,
-): LayerTurnAnimation | null {
-  const spec = FACE_SPECS[move.face];
-  const affectedCubies = cubeGroup.children.filter(
-    (child) => child.userData.cubiePosition?.[spec.axis] === spec.layer,
-  );
-
-  if (affectedCubies.length === 0) {
-    return null;
-  }
-
-  const pivot = new Group();
-  pivot.name = `layer-turn-${move.face}`;
-  cubeGroup.add(pivot);
-
-  for (const cubie of affectedCubies) {
-    pivot.add(cubie);
-  }
-
-  return {
-    move,
-    pivot,
-    axis: spec.axis,
-    targetAngle: quarterTurnsForMove(move) * (Math.PI / 2),
-    startedAt,
-    durationMs: LAYER_TURN_DURATION_MS,
-  };
-}
-
-function updateLayerTurnAnimation(
-  animation: LayerTurnAnimation,
-  time: number,
-): LayerTurnAnimation | null {
-  const progress = Math.min(
-    1,
-    (time - animation.startedAt) / animation.durationMs,
-  );
-  const easedProgress = easeOutCubic(progress);
-
-  animation.pivot.rotation[animation.axis] =
-    animation.targetAngle * easedProgress;
-
-  return progress >= 1 ? animation : null;
-}
-
-function quarterTurnsForMove(move: Move): number {
-  const spec = FACE_SPECS[move.face];
-
-  if (move.amount === 2) {
-    return 2;
-  }
-
-  return move.direction === 'clockwise' ? -spec.layer : spec.layer;
-}
-
-function easeOutCubic(progress: number): number {
-  return 1 - (1 - progress) ** 3;
-}
-
-function isLayerHitData(value: unknown): value is LayerHit {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<LayerHit>;
-
-  return Boolean(candidate.position && candidate.normal);
-}
-
 function rebuildCubeGroup(group: Group, state: CubeState) {
   disposeGroup(group);
 
@@ -467,7 +220,6 @@ function rebuildCubeGroup(group: Group, state: CubeState) {
   for (const cubie of getRenderCubies(state)) {
     const cubieGroup = new Group();
     cubieGroup.name = `cubie-${cubie.id}`;
-    cubieGroup.userData.cubiePosition = { ...cubie.position };
     cubieGroup.position.set(
       cubie.position.x * CUBIE_SPACING,
       cubie.position.y * CUBIE_SPACING,
@@ -486,10 +238,6 @@ function rebuildCubeGroup(group: Group, state: CubeState) {
         createStickerMaterial(CLASSIC_CUBE_HEX[sticker.color]),
       );
 
-      stickerMesh.userData.layerHit = {
-        position: { ...cubie.position },
-        normal: { ...sticker.normal },
-      } satisfies LayerHit;
       stickerMesh.position.copy(normal.clone().multiplyScalar(STICKER_OFFSET));
       stickerMesh.quaternion.copy(
         new Quaternion().setFromUnitVectors(BASE_NORMAL, normal),
