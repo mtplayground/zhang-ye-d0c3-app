@@ -1,9 +1,13 @@
 import type { CompletionResult } from './solveSession';
 
+export type SolveResult = CompletionResult & {
+  completedAt?: string;
+};
+
 export type ResultComparison = {
-  result: CompletionResult;
-  previousBest: CompletionResult | null;
-  bestResult: CompletionResult;
+  result: SolveResult;
+  previousBest: SolveResult | null;
+  bestResult: SolveResult;
   isFirstResult: boolean;
   isNewBest: boolean;
   timeDeltaMs: number | null;
@@ -11,8 +15,8 @@ export type ResultComparison = {
 };
 
 export function compareResultWithBest(
-  result: CompletionResult,
-  previousBest: CompletionResult | null,
+  result: SolveResult,
+  previousBest: SolveResult | null,
 ): ResultComparison {
   const normalizedResult = normalizeResult(result);
   const normalizedPreviousBest = previousBest
@@ -39,8 +43,8 @@ export function compareResultWithBest(
 }
 
 export function isBetterResult(
-  result: CompletionResult,
-  bestResult: CompletionResult,
+  result: SolveResult,
+  bestResult: SolveResult,
 ): boolean {
   const normalizedResult = normalizeResult(result);
   const normalizedBest = normalizeResult(bestResult);
@@ -52,7 +56,7 @@ export function isBetterResult(
   return normalizedResult.moveCount < normalizedBest.moveCount;
 }
 
-function normalizeResult(result: CompletionResult): CompletionResult {
+function normalizeResult(result: SolveResult): SolveResult {
   if (!Number.isFinite(result.elapsedMs)) {
     throw new Error('Result elapsed time must be a finite number');
   }
@@ -64,5 +68,6 @@ function normalizeResult(result: CompletionResult): CompletionResult {
   return {
     elapsedMs: Math.max(0, result.elapsedMs),
     moveCount: result.moveCount,
+    ...(result.completedAt ? { completedAt: result.completedAt } : {}),
   };
 }

@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
 import { CubeScene, type Move } from './features/cube';
 import {
   ResultDialog,
+  appendSolveResult,
   createInitialGameSession,
   formatElapsedTime,
   gameSessionReducer,
+  getBestSolveResult,
+  loadSolveHistory,
+  saveSolveHistory,
 } from './features/session';
 
 type ActionButtonProps = {
@@ -54,6 +58,17 @@ function App() {
   } = gameSession;
   const completionResult = solveSession.result;
   const [isResultDismissed, setIsResultDismissed] = useState(false);
+  const savedResultKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const history = loadSolveHistory();
+    const storedBestResult = getBestSolveResult(history);
+
+    dispatchGameSession({
+      type: 'hydrateBest',
+      bestResult: storedBestResult,
+    });
+  }, []);
 
   useEffect(() => {
     if (timer.status !== 'running') {
@@ -83,8 +98,33 @@ function App() {
       type: 'commitMove',
       move,
       nowMs: performance.now(),
+      completedAt: new Date().toISOString(),
     });
   }, []);
+
+  useEffect(() => {
+    if (!lastResultComparison) {
+      return;
+    }
+
+    const resultKey = resultStorageKey(lastResultComparison.result);
+
+    if (savedResultKeyRef.current === resultKey) {
+      return;
+    }
+
+    savedResultKeyRef.current = resultKey;
+
+    const history = loadSolveHistory();
+    const nextHistory = appendSolveResult(history, lastResultComparison.result);
+
+    if (saveSolveHistory(nextHistory)) {
+      dispatchGameSession({
+        type: 'hydrateBest',
+        bestResult: getBestSolveResult(nextHistory),
+      });
+    }
+  }, [lastResultComparison]);
 
   const handleScramble = useCallback(() => {
     setIsResultDismissed(false);
@@ -191,6 +231,14 @@ function App() {
       ) : null}
     </main>
   );
+}
+
+function resultStorageKey(result: {
+  elapsedMs: number;
+  moveCount: number;
+  completedAt?: string;
+}) {
+  return `${result.elapsedMs}:${result.moveCount}:${result.completedAt ?? ''}`;
 }
 
 export default App;
