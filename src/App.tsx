@@ -1,20 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { Palette, RotateCcw, Shuffle } from 'lucide-react';
+import { CubeScene, type Move } from './features/cube';
 import {
-  CubeScene,
-  applyMove,
-  createScrambledCube,
-  createSolvedCube,
-  isSolved,
-  type Move,
-} from './features/cube';
-import {
-  createIdleTimer,
+  createInitialGameSession,
   formatElapsedTime,
-  getElapsedMs,
-  resetTimer,
-  startTimer,
-  stopTimer,
+  gameSessionReducer,
 } from './features/session';
 
 type ActionButtonProps = {
@@ -48,21 +38,23 @@ function ActionButton({
 }
 
 function App() {
-  const [cubeState, setCubeState] = useState(() => createSolvedCube());
-  const [timer, setTimer] = useState(() => createIdleTimer());
-  const [visibleElapsedMs, setVisibleElapsedMs] = useState(0);
-  const [moveCount, setMoveCount] = useState(0);
+  const [gameSession, dispatchGameSession] = useReducer(
+    gameSessionReducer,
+    undefined,
+    createInitialGameSession,
+  );
+  const { cubeState, solveSession, timer, visibleElapsedMs } = gameSession;
+  const completionResult = solveSession.result;
 
   useEffect(() => {
     if (timer.status !== 'running') {
-      setVisibleElapsedMs(timer.elapsedMs);
       return;
     }
 
     let animationFrameId = 0;
 
     const updateElapsed = () => {
-      setVisibleElapsedMs(getElapsedMs(timer, performance.now()));
+      dispatchGameSession({ type: 'tick', nowMs: performance.now() });
       animationFrameId = window.requestAnimationFrame(updateElapsed);
     };
 
@@ -74,36 +66,19 @@ function App() {
   }, [timer]);
 
   const handleMoveCommit = useCallback((move: Move) => {
-    setCubeState((currentState) => {
-      const nextState = applyMove(currentState, move);
-
-      if (isSolved(nextState)) {
-        const nowMs = performance.now();
-
-        setTimer((currentTimer) => {
-          const stoppedTimer = stopTimer(currentTimer, nowMs);
-          setVisibleElapsedMs(stoppedTimer.elapsedMs);
-          return stoppedTimer;
-        });
-      }
-
-      return nextState;
+    dispatchGameSession({
+      type: 'commitMove',
+      move,
+      nowMs: performance.now(),
     });
-    setMoveCount((currentMoveCount) => currentMoveCount + 1);
   }, []);
 
   const handleScramble = useCallback(() => {
-    setCubeState(createScrambledCube());
-    setTimer(startTimer(performance.now()));
-    setVisibleElapsedMs(0);
-    setMoveCount(0);
+    dispatchGameSession({ type: 'scramble', nowMs: performance.now() });
   }, []);
 
   const handleReset = useCallback(() => {
-    setCubeState(createSolvedCube());
-    setTimer(resetTimer());
-    setVisibleElapsedMs(0);
-    setMoveCount(0);
+    dispatchGameSession({ type: 'reset' });
   }, []);
 
   return (
@@ -149,7 +124,7 @@ function App() {
           <div className="flex items-center gap-3 text-sm text-slate-500">
             <span>步数</span>
             <strong className="font-mono text-lg font-semibold text-slate-900">
-              {moveCount}
+              {solveSession.moveCount}
             </strong>
             <span className="h-4 w-px bg-slate-200" aria-hidden="true" />
             <span>最佳</span>
@@ -157,6 +132,18 @@ function App() {
               --:--.--
             </strong>
           </div>
+
+          {completionResult ? (
+            <div
+              className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+              role="status"
+              aria-live="polite"
+              data-completion-status="completed"
+            >
+              已还原 · {formatElapsedTime(completionResult.elapsedMs)} ·{' '}
+              {completionResult.moveCount}步
+            </div>
+          ) : null}
 
           <div className="flex w-full items-center justify-center gap-3 sm:w-auto">
             <ActionButton
